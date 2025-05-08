@@ -44,13 +44,35 @@ if __name__ == '__main__':
     # Calculate the transfer function for both FOM and ROM
     G_diff_response, f = WcalcFunctions.TFfromTimeSeries(snapshots_flat=snapshots_flat_diff, U=U, dt=dt, number_of_poles=4)
 
+    # Weight matrix calculation from book
     WcalcFunctions.ErrorFreqPlot(G_diff_response, 2*np.pi*f)
 
-    freq, W_vec, W_tf = WcalcFunctions.WcalculationVec(G_diff_response, f, omega_b = 1000.0, epsilon = 0.01)
-    print(f'freq (omega): {freq}')
-    print(f'W_vec (Weights in vector form): {W_vec}')
-    print(f'W_freq (Weights in TF form): {W_tf}')
+    freq1, W_vec1, W_tf1 = WcalcFunctions.WcalculationVec1(G_diff_response, f, omega_b = 40.0, epsilon = 0.1)
+    print(f'freq (omega): {freq1}')
+    print(f'W_vec (Weights in vector form): {W_vec1}')
+    print(f'W_freq (Weights in TF form): {W_tf1}')
 
-    WcalcFunctions.WeightFreqPlot(2*np.pi*f, W_vec)
+    WcalcFunctions.WeightFreqPlot(2*np.pi*f, W_vec1)
 
-    total_db = WcalcFunctions.SmallGainPracticalCheck(G_diff_response, W_vec, w = 2*np.pi*f)
+    total_db1 = WcalcFunctions.SmallGainPracticalCheck(G_diff_response, W_vec1, w = 2*np.pi*f)
+
+    # Weight matrix adjustment 1
+    freq2, W_vec2, W_tf2 = WcalcFunctions.WcalculationVec2(G_diff_response, f, omega_b = 40.0, omega_h = 200.0, epsilon = 0.1)
+    # freq2, W_vec2, W_tf2 = WcalcFunctions.WcalculationVec2(G_diff_response, f, omega_h = 10.0, epsilon = 1.0, slope_db_per_dec=-50)
+    print(f'freq (omega): {freq2}')
+    print(f'W_vec (Weights in vector form): {W_vec2}')
+    print(f'W_freq (Weights in TF form): {W_tf2}')
+
+    WcalcFunctions.WeightFreqPlot(2*np.pi*f, W_vec2)
+
+    total_db2 = WcalcFunctions.SmallGainPracticalCheck(G_diff_response, W_vec2, w = 2*np.pi*f)
+
+    # Weight matrix adjustment 2
+    freq3, W_vec3, W_tf3 = WcalcFunctions.WcalculationVec3(G_diff_response, f, omega_b = 40.0, epsilon = 0.1)
+    print(f'freq (omega): {freq3}')
+    print(f'W_vec (Weights in vector form): {W_vec3}')
+    print(f'W_freq (Weights in TF form): {W_tf3}')
+
+    WcalcFunctions.WeightFreqPlot(2*np.pi*f, W_vec3)
+
+    total_db3 = WcalcFunctions.SmallGainPracticalCheck(G_diff_response, W_vec3, w = 2*np.pi*f)

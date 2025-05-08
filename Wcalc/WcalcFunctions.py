@@ -106,55 +106,6 @@ def dmdc_sim(A, B, U, dt, x0, DMDcBasis, output_h5='dmdc_span_averages.h5'):
     print(f"Wrote reconstructed snapshots to {out_path}, shape={data.shape}")
     return out_path
 
-# def TFfromTimeSeries(snapshots_flat, U, dt, number_of_poles):
-#     """
-#     Estimate frequency response (Transfer Function) from time series data.
-    
-#     Parameters:
-#         snapshots_flat: ndarray
-#             Flattened difference between FOM and ROM snapshots [states x samples].
-#         U: ndarray
-#             Actuation input vector [1 x samples].
-#         dt: float
-#             Time step between samples.
-#         number_of_poles: int (unused, maintained for compatibility)
-#             Number of poles desired if using rational fitting (ignored here).
-
-#     Returns:
-#         G_diff_freq_response: ndarray (complex)
-#             Frequency response of the difference G_diff at frequencies f.
-#         f: ndarray
-#             Frequencies (in Hz) at which the frequency response is computed.
-#     """
-
-#     # Ensure dt is scalar float
-#     dt = float(np.atleast_1d(dt)[0])
-#     fs = 1.0 / dt  # Sampling frequency
-
-#     # Flatten input
-#     u = np.ravel(U)
-#     Y_diff = snapshots_flat  # shape: (n_states, n_samples)
-
-#     # Calculate frequency response for each state separately, then average magnitude-wise
-#     n_states, n_samples = Y_diff.shape
-#     nperseg = min(1024, n_samples)
-
-#     # Compute input power spectral density once (common for all states)
-#     f, Puu = welch(u, fs=fs, nperseg=nperseg)
-
-#     # Initialize array to hold individual state frequency responses
-#     G_states = np.zeros((n_states, len(f)), dtype=complex)
-
-#     for i in range(n_states):
-#         _, Pyu = csd(Y_diff[i, :], u, fs=fs, nperseg=nperseg)
-#         # Compute frequency response for each state
-#         G_states[i, :] = Pyu / Puu
-
-#     # Average the frequency response over all states (robust to noise)
-#     G_diff_freq_response = np.mean(G_states, axis=0)
-
-#     return G_diff_freq_response, f
-
 def TFfromTimeSeries(snapshots_flat, U, dt, number_of_poles):
     """
     Estimate the frequency response G_diff(f) = P_yu(f) / P_uu(f)
@@ -200,14 +151,82 @@ def TFfromTimeSeries(snapshots_flat, U, dt, number_of_poles):
                      nfft=nfft)
         G_states[i, :] = Pyu / Puu
 
-    # 3) average across states
-    G_diff = np.mean(G_states, axis=0)
+    #G_diff = np.mean(G_states, axis=0) # 3) average across states
+    G_diff = np.max(np.abs(G_states), axis=0) # 3) Take max value across states
 
     return G_diff, f
 
+def WcalculationVec1(G_DIFF: TransferFunction, freqs: np.ndarray, omega_b: float, epsilon: float):
+    """
+    Build W(jw) = ( (1/Ms) * s + ω_b ) / ( s + ω_b*ε ) 
+    on the same freq grid used by TFfromTimeSeries.
 
+    Returns
+      w   : 1D array of rad/s
+      W   : complex 1D array W(jw)
+      (optionally) We_tf: the TransferFunction object
+    """
+    # 1) Turn Hz->rad/s
+    w = 2 * np.pi * freqs
 
-def WcalculationVec(G_DIFF: TransferFunction,
+    # 3) Pointwise error magnitude
+    mag    = np.abs(G_DIFF)
+    Ms     = 1.1 * np.max(mag)    # 10% safety margin
+
+    # 4) Build s = jω and evaluate W(jω)
+    s = 1j * w
+    W = ((1/Ms)*s + omega_b) / (s + omega_b*epsilon)
+
+    # 5) (Optional) also package it as a TransferFunction
+    We_tf = TransferFunction([1/Ms, omega_b],
+                             [1,     omega_b*epsilon])
+
+    return w, W, We_tf
+
+def WcalculationVec2(G_diff, freqs, 
+                     omega_b,    # first corner (rad/s)
+                     epsilon,    #  => W(0)=1/ε
+                     omega_h     # second corner (rad/s)
+                     ):
+    """
+    Two‐corner weight:
+      W(s) = [(1/Ms)s + ω_b]    ω_h
+             ---------------  × ------
+             [      s + εω_b]    s + ω_h
+
+    => –20d/dec for ω₁<ω<ω₂, –40d/dec for ω>ω₂
+    """
+    # 1) Hz→rad/s
+    w = 2*np.pi*freqs
+    s = 1j*w
+
+    # 2) Error magnitude and scaling
+    mag = np.abs(G_diff)
+    Ms  = 1.1*np.max(mag)
+
+    # 3) Build the two pieces
+    W1 = ((1/Ms)*s + omega_b) / (       s + omega_b*epsilon )
+    W2 =               (         omega_h ) / ( s + omega_h     )
+
+    # 4) Total weight
+    W  = W1 * W2
+
+    # 5) If you still want a TF object for μ‐synthesis:
+    W1_tf = TransferFunction([1/Ms, omega_b],
+                             [1,     omega_b*epsilon])
+    W2_tf = TransferFunction([        omega_h],
+                             [1,           omega_h])
+    
+    # 6) convolve numerators and denominators
+    num = np.convolve(W1_tf.num, W2_tf.num)
+    den = np.convolve(W1_tf.den, W2_tf.den)
+
+    # 7) package the result
+    We_tf = TransferFunction(num, den)
+
+    return w, W, We_tf
+
+def WcalculationVec3(G_DIFF: TransferFunction,
                     freqs: np.ndarray,     # in Hz
                     omega_b: float,
                     epsilon: float):
@@ -223,22 +242,20 @@ def WcalculationVec(G_DIFF: TransferFunction,
     # 1) Turn Hz->rad/s
     w = 2 * np.pi * freqs
 
-    # # 2) Evaluate both transfer functions
-    # _, H_DIFF = G_DIFF.freqresp(w)
-
-    # For SISO SciPy TF you often get H.shape == (n_freq,) already.
-
     # 3) Pointwise error magnitude
     mag    = np.abs(G_DIFF)
     Ms     = 1.1 * np.max(mag)    # 10% safety margin
 
     # 4) Build s = jω and evaluate W(jω)
     s = 1j * w
-    W = ((1/Ms)*s + omega_b) / (s + omega_b*epsilon)
+    #W = ((1/Ms)*s + omega_b) / (s + omega_b*epsilon)
+    W   = ((1/Ms)*s + omega_b/Ms) / s
 
     # 5) (Optional) also package it as a TransferFunction
+    # We_tf = TransferFunction([1/Ms, omega_b],
+    #                          [1,     omega_b*epsilon])
     We_tf = TransferFunction([1/Ms, omega_b],
-                             [1,     omega_b*epsilon])
+                             [1, 0])    
 
     return w, W, We_tf
 
@@ -292,9 +309,6 @@ def SmallGainPracticalCheck(G_DIFF, W_vec, w):
     total_db : ndarray
         The pointwise sum in dB: 20·log10|Δ(jω)| + 20·log10|W(jω)|.
     """
-    # # Compute frequency responses
-    # _, H_DIFF = G_DIFF.freqresp(w)
-    # H_diff = H_DIFF.flatten()
 
     # Convert to dB
     error_db  = 20 * np.log10(np.abs(G_DIFF))
