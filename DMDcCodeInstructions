@@ -1,0 +1,52 @@
+The following are instructions for generating a ROM using modSTREAmS and DMDc scripts:
+
+Place the output folder from a DMDc run inside a directory (e.g. named DMDc), along with main.py, DMDcFunctions.py, DMDcAnimation.py, and view_slice.py.
+
+If the following in main.py need adjustment, do so.
+    # Define paths to the FOM span_averages.H5 file and the corresponding actuation values, as well as the interval between writing the span-averaged data
+    span_avg = '/home/nate/Desktop/DMDc_uvw/output/distribute_save/span_averages.h5'
+    traj     = '/home/nate/Desktop/DMDc_uvw/output/distribute_save/trajectories.h5'
+    SA_int = 5 # Note: Inverval can be found under "config" section of justfile
+
+Run main.py 
+
+
+
+
+
+The following are instructions for analyzing the ROM using modSTREAmS and DMDcAnalysis scripts:
+
+Place the output folder from a FOM run for which you would like to compare to ROM results using identical actuation values into a directory (e.g. named DMDcAnalysis). Also make sure ROManalysis.py and AnalysisFunctions.py are present in that same directory. Additionally, move the "ReducedModels" folder to the directory, as well as A_red_matrix.npy, B_red_matrix.npy, and DMDcBasis.npy.
+
+If the following in ROManalysis.py need adjustment, do so.
+    # Define paths to the FOM span_averages.H5 file and the corresponding actuation values, as well as the interval between writing the span-averaged data
+    span_avg = '/home/nate/Desktop/DMDc_uvw/output/distribute_save/span_averages.h5'
+    traj     = '/home/nate/Desktop/DMDc_uvw/output/distribute_save/trajectories.h5'
+    SA_int = 5 # Note: Inverval can be found under "config" section of justfile
+    ...
+    compError = [0] # comps = [0,1,2] correspond to U, V, W in the 2D RSE 
+
+Run ROManalysis.py
+
+
+NOTES ON CURRENT PROGRESS
+
+5/5/25: 
+(DMD) nate@nate-1-0:~/Desktop/DMDcAnalysis$ /home/nate/Desktop/BL_Re200_UVA/DMD/bin/python /home/nate/Desktop/DMDcAnalysis/ROManalysis.py
+dt_vals shape: (500,)
+Init_snap_reduced: (224,)
+x0_elements: (224,)
+n_states: 224
+n_steps: 499
+Wrote reconstructed snapshots to /home/nate/Desktop/DMDcAnalysis/dmdc_span_averages.h5, shape=(500, 3, 600, 208)
+Erms: 0.011437536352340502
+NRMSE: 0.008867914525450793
+Efrobenius: 0.008870002556110448 
+
+5/6/25
+
+(DMD) nate@nate-1-0:~/Desktop/DMDcAnalysis$ python3 -c "from AnalysisFunctions import H2_Hinf_Analysis; H2_Hinf_Analysis()"
+[99pct]  ‖G‖₂ ≈ 9.536e+00  ;  ‖G‖∞ ≈ 7.371e-01  @ ω=0.01 rad/s
+[96pct]  ‖G‖₂ ≈ 8.166e+00  ;  ‖G‖∞ ≈ 7.370e-01  @ ω=0.01 rad/s
+[93pct]  ‖G‖₂ ≈ 7.827e+00  ;  ‖G‖∞ ≈ 7.372e-01  @ ω=0.01 rad/s
+[90pct]  ‖G‖₂ ≈ 8.447e+00  ;  ‖G‖∞ ≈ 7.372e-01  @ ω=0.01 rad/s

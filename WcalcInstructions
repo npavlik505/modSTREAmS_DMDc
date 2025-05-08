@@ -1,0 +1,2 @@
+Move the FOM span_averages.h5 file and the original DMDc ROM dmdc_span_averages.h5 file to the same directory (e.g. named "Wcalc"). Also include Wcalc.py and WclcFunctions.py to the directory.
+
